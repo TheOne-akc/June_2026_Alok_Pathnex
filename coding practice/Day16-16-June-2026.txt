@@ -1,0 +1,148 @@
+# Day 16 — Ansible Roles, DynamoDB, StatefulSet, Service Check
+
+## Ansible — Create Role Structure
+---------------------------------
+- name: Pathnex Role Combined Playbook
+  hosts: webservers
+  become: yes
+
+  vars:
+    institute_name: "Pathnex"
+
+  tasks:
+    - name: Install Nginx (Debian/Ubuntu)
+      apt:
+        name: nginx
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Install Nginx (RHEL/CentOS)
+      yum:
+        name: nginx
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Deploy custom HTML file
+      copy:
+        dest: /var/www/html/index.html
+        content: |
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>{{ institute_name }} - Welcome</title>
+          </head>
+          <body>
+            <h1>Hello from {{ institute_name }}!</h1>
+            <p>This page is deployed using Ansible role structure.</p>
+          </body>
+          </html>
+      notify: Restart Nginx
+
+  handlers:
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+
+
+
+## Terraform — DynamoDB Table
+---------------------------------
+resource "aws_dynamodb_table" "PathnexTable" {
+  name           = "PathnexTrainingTable"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "ID"
+
+  attribute {
+    name = "ID"
+    type = "S"
+  }
+
+  tags = {
+    Name = "Pathnex-DDB"
+  }
+}
+
+
+## Kubernetes — StatefulSet
+------------------------------
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pathnex-db
+spec:
+  serviceName: "pathnex"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pathnex-db
+  template:
+    metadata:
+      labels:
+        app: pathnex-db
+    spec:
+      containers:
+        - name: db
+          image: mysql
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "Pathnex123"
+
+
+## Shell Script — Check Service Running
+------------------------------------------
+#!/bin/bash
+
+SERVICE="sshd"
+
+if systemctl is-active --quiet $SERVICE; then
+  echo "$SERVICE is running"
+else
+  echo "$SERVICE is NOT running"
+fi
+
+##  Jenkins Pipeline — Promote Artifacts
+-----------------------------------------
+
+pipeline {
+    agent any
+    environment {
+        INSTITUTE_NAME = "Pathnex"
+    }
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        stage('Promote') {
+            steps {
+                input message: "Promote artifacts to staging?"
+                sh 'echo "Promoting artifacts for $INSTITUTE_NAME"'
+            }
+        }
+    }
+}
+
+## GitLab CI — Artifacts Promotion
+---------------------------------------
+stages:
+  - build
+  - promote
+
+build:
+  stage: build
+  image: maven:3.8.1-jdk-17
+  script:
+    - mvn clean package
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+promote:
+  stage: promote
+  image: alpine:latest
+  script:
+    - echo "Promoting artifacts for Pathnex"
+  when: manual
