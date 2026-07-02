@@ -1,0 +1,6 @@
+Day19
+-----
+40 min of coding practise
+ Today i learn  Git Deploy, RDS Skeleton, Rolling Strategy, Ping Check.
+
+ 3 hour of self studying
